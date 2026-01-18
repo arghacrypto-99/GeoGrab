@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Geo App</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #050505;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont;
+  color: white;
+}
+
+#map { position: fixed; inset: 0; }
+
+/* ================= GLASS ================= */
+.glass {
+  background: linear-gradient(
+    135deg,
+    rgba(255,255,255,0.14),
+    rgba(255,255,255,0.04)
+  );
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255,255,255,0.18);
+  box-shadow:
+    0 25px 60px rgba(0,0,0,0.55),
+    inset 0 1px 0 rgba(255,255,255,0.18);
+  position: relative;
+  overflow: hidden;
+}
+
+/* ================= TOP BAR ================= */
+#topBar {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  border-radius: 22px;
+  z-index: 2000;
+}
+
+/* ================= BUTTONS ================= */
+.btn {
+  position: fixed;
+  right: 16px;
+  padding: 14px;
+  border-radius: 18px;
+  z-index: 2000;
+  transition:
+    bottom .3s cubic-bezier(.22,1,.36,1),
+    transform .15s ease,
+    box-shadow .25s ease;
+  animation: float 5.5s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%,100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.btn:active {
+  animation: none;
+  transform: scale(0.92);
+  box-shadow: 0 0 20px rgba(77,166,255,.6);
+}
+
+#centerBtn { bottom: 120px; }
+#satBtn { bottom: 190px; }
+
+/* ================= SEARCH ================= */
+#searchBox {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 32px);
+  max-width: 420px;
+  border-radius: 20px;
+  padding: 10px 14px;
+  z-index: 2200;
+}
+
+#searchInput {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: white;
+  font-size: 15px;
+}
+
+#suggestions { margin-top: 8px; }
+
+.suggestion {
+  padding: 10px;
+  border-radius: 14px;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(10px);
+  animation: suggestionIn .35s cubic-bezier(.22,1,.36,1) forwards;
+}
+
+@keyframes suggestionIn {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.suggestion:hover { background: rgba(255,255,255,0.08); }
+
+/* ================= CARD ================= */
+#card {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 32px);
+  max-width: 420px;
+  padding: 16px;
+  border-radius: 24px;
+  z-index: 1500;
+  transition:
+    opacity .35s ease,
+    transform .45s cubic-bezier(.22,1,.36,1);
+}
+
+#card.fade {
+  opacity: 0;
+  transform: translateX(-50%) translateY(24px) scale(0.96);
+}
+
+.card-title { font-size: 15px; margin-bottom: 6px; }
+.card-row { font-size: 14px; opacity: .85; }
+.card-action {
+  margin-top: 10px;
+  color: #4da6ff;
+  cursor: pointer;
+}
+
+/* ================= GPS PULSE ================= */
+.gps-pulse {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #4da6ff;
+  box-shadow: 0 0 0 rgba(77,166,255,.6);
+  animation: gpsPulse 2.4s infinite;
+}
+
+@keyframes gpsPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(77,166,255,.6); }
+  70%  { box-shadow: 0 0 0 28px rgba(77,166,255,0); }
+  100% { box-shadow: 0 0 0 0 rgba(77,166,255,0); }
+}
+
+/* ================= INSTAGRAM ================= */
+#instaBtn {
+  position: fixed;
+  left: 16px;
+  bottom: 120px;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+#instaBtn::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  background: conic-gradient(
+    #feda75,
+    #fa7e1e,
+    #d62976,
+    #962fbf,
+    #4f5bd5,
+    #feda75
+  );
+  filter: blur(8px);
+  animation: instaSpin 4s linear infinite;
+}
+
+@keyframes instaSpin { to { transform: rotate(360deg); } }
+
+#instaBtn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle, rgba(255,255,255,.35), transparent 60%);
+  opacity: 0;
+}
+
+#instaBtn:active::after { opacity: 1; }
+#instaBtn svg { z-index: 1; }
+</style>
+</head>
+<script src="/geograb.js"></script>
+<body>
+
+<div id="map"></div>
+<div id="topBar" class="glass">Live Location</div>
+
+<div id="searchBox" class="glass">
+  <input id="searchInput" placeholder="Search places…" autocomplete="off">
+  <div id="suggestions"></div>
+</div>
+
+<button class="btn glass" id="centerBtn">📍</button>
+<button class="btn glass" id="satBtn">🛰️</button>
+
+<div id="card" class="glass"></div>
+
+<a href="https://instagram.com/arghacrypto99" target="_blank" id="instaBtn" class="glass">
+  <svg viewBox="0 0 24 24" width="18" height="18">
+    <path fill="white"
+      d="M7 2h10a5 5 0 015 5v10a5 5 0 01-5 5H7a5 5 0 01-5-5V7a5 5 0 015-5zm5 5a5 5 0 100 10 5 5 0 000-10zm6.5-.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM12 9a3 3 0 110 6 3 3 0 010-6z"/>
+  </svg>
+</a>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+const map = L.map("map", { zoomControl: false }).setView([0, 0], 2);
+
+const normalMap = L.tileLayer(
+  "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  { maxZoom: 19 }
+);
+
+const satelliteMap = L.tileLayer(
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  { maxZoom: 19 }
+).addTo(map);
+
+let satelliteOn = true;
+satBtn.onclick = () => {
+  satelliteOn ? map.removeLayer(satelliteMap) : satelliteMap.addTo(map);
+  satelliteOn ? normalMap.addTo(map) : map.removeLayer(normalMap);
+  satelliteOn = !satelliteOn;
+};
+
+let marker, accuracyCircle, searchMarker, lastPos;
+let uiMode = "gps", cardData;
+
+const card = document.getElementById("card");
+const instaBtn = document.getElementById("instaBtn");
+
+function renderCard() {
+  card.classList.add("fade");
+  setTimeout(() => {
+    if (!cardData) return;
+
+    card.innerHTML = cardData.type === "gps"
+      ? `
+        <div class="card-title">Your Location</div>
+        <div class="card-row">Latitude: ${cardData.lat.toFixed(5)}</div>
+        <div class="card-row">Longitude: ${cardData.lon.toFixed(5)}</div>
+        <div class="card-row">Accuracy: ${Math.round(cardData.acc)} m</div>
+      `
+      : `
+        <div class="card-title">${cardData.name}</div>
+        <div class="card-row">Latitude: ${cardData.lat.toFixed(5)}</div>
+        <div class="card-row">Longitude: ${cardData.lon.toFixed(5)}</div>
+        <div class="card-action" onclick="returnToGPS()">Back to my location</div>
+      `;
+
+    card.classList.remove("fade");
+
+    card.animate(
+      [
+        { transform: "translateX(-50%) scale(0.96)" },
+        { transform: "translateX(-50%) scale(1.02)" },
+        { transform: "translateX(-50%) scale(1)" }
+      ],
+      { duration: 420, easing: "cubic-bezier(.22,1,.36,1)" }
+    );
+
+    adjustButtons();
+  }, 180);
+}
+
+function adjustButtons() {
+  const h = card.offsetHeight + 30;
+  centerBtn.style.bottom = (h + 60) + "px";
+  satBtn.style.bottom = (h + 130) + "px";
+  instaBtn.style.bottom = (h + 40) + "px";
+}
+
+navigator.geolocation.watchPosition(pos => {
+  lastPos = pos;
+  if (uiMode !== "gps") return;
+
+  const { latitude: lat, longitude: lon, accuracy: acc } = pos.coords;
+  cardData = { type: "gps", lat, lon, acc };
+  renderCard();
+
+  if (!marker) {
+    const pulseIcon = L.divIcon({
+      className: '',
+      html: '<div class="gps-pulse"></div>',
+      iconSize: [14,14],
+      iconAnchor: [7,7]
+    });
+
+    marker = L.marker([lat, lon], { icon: pulseIcon }).addTo(map);
+    accuracyCircle = L.circle([lat, lon], { radius: acc, fillOpacity: 0.15 }).addTo(map);
+    map.flyTo([lat, lon], 17);
+  } else {
+    marker.setLatLng([lat, lon]);
+    accuracyCircle.setLatLng([lat, lon]).setRadius(acc);
+  }
+});
+
+const input = document.getElementById("searchInput");
+const suggestions = document.getElementById("suggestions");
+let debounce;
+
+input.addEventListener("input", () => {
+  clearTimeout(debounce);
+  const q = input.value.trim();
+
+  if (!q) {
+    returnToGPS();
+    suggestions.innerHTML = "";
+    return;
+  }
+
+  debounce = setTimeout(async () => {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`
+    );
+    const data = await res.json();
+
+    suggestions.innerHTML = "";
+    data.slice(0, 6).forEach((place, i) => {
+      const d = document.createElement("div");
+      d.className = "suggestion";
+      d.textContent = place.display_name;
+      d.style.animationDelay = `${i * 40}ms`;
+      d.onclick = () => selectPlace(place);
+      suggestions.appendChild(d);
+    });
+  }, 300);
+});
+
+function selectPlace(place) {
+  document.getElementById("searchBox").animate(
+    [
+      { transform: "translateX(-50%) scale(1)" },
+      { transform: "translateX(-50%) scale(0.96)" },
+      { transform: "translateX(-50%) scale(1)" }
+    ],
+    { duration: 180 }
+  );
+
+  uiMode = "search";
+
+  if (marker) map.removeLayer(marker);
+  if (accuracyCircle) map.removeLayer(accuracyCircle);
+  if (searchMarker) map.removeLayer(searchMarker);
+
+  const lat = +place.lat;
+  const lon = +place.lon;
+
+  searchMarker = L.marker([lat, lon]).addTo(map);
+  map.flyTo([lat, lon], 16);
+
+  cardData = { type: "place", name: place.display_name, lat, lon };
+  renderCard();
+  suggestions.innerHTML = "";
+}
+
+function returnToGPS() {
+  uiMode = "gps";
+
+  if (searchMarker) {
+    map.removeLayer(searchMarker);
+    searchMarker = null;
+  }
+
+  if (lastPos) {
+    const { latitude, longitude, accuracy } = lastPos.coords;
+    cardData = { type: "gps", lat: latitude, lon: longitude, acc: accuracy };
+    map.flyTo([latitude, longitude], 17);
+    renderCard();
+  }
+}
+
+centerBtn.onclick = () => {
+  input.value = "";
+  suggestions.innerHTML = "";
+  returnToGPS();
+};
+</script>
+
+</body>
+</html>};
+</script>
+
+</body>
+</html>
